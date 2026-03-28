@@ -1,0 +1,31 @@
+# Handle line endings automatically for files detected as text
+# and leave all files detected as binary untouched.
+
+* text=auto
+
+# Explicitly declare text files that should always use LF on checkout
+*.md        text eol=lf
+*.html      text eol=lf
+*.py        text eol=lf
+*.js        text eol=lf
+*.yaml      text eol=lf
+*.yml       text eol=lf
+*.txt       text eol=lf
+*.json      text eol=lf
+*.csv       text eol=lf
+*.sh        text eol=lf
+
+# Declare files that should always use CRLF on checkout
+# (none in this repo — Windows editors handle LF fine)
+
+# Binary files — never convert line endings
+*.png       binary
+*.jpg       binary
+*.jpeg      binary
+*.gif       binary
+*.ico       binary
+*.zip       binary
+*.docx      binary
+*.xlsx      binary
+*.pptx      binary
+*.pdf       binary

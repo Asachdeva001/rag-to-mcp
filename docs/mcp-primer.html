@@ -1,0 +1,437 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MCP Primer — RAG-to-MCP Workshop</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: 'Segoe UI', Arial, sans-serif;
+    background: #0f1117;
+    color: #e8eaf0;
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  nav {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 24px;
+    background: #1a1d27;
+    border-bottom: 1px solid #2a2d3a;
+    flex-shrink: 0;
+  }
+  nav .title { font-size: 13px; color: #8891aa; letter-spacing: 0.5px; }
+  nav .controls { display: flex; align-items: center; gap: 12px; }
+  nav button {
+    background: #2a2d3a; border: 1px solid #3a3d4a; color: #c8cdd8;
+    padding: 6px 16px; border-radius: 4px; cursor: pointer; font-size: 13px;
+    transition: all 0.15s;
+  }
+  nav button:hover { background: #0D6E8A; border-color: #1a9aba; color: #fff; }
+  nav button:disabled { opacity: 0.3; cursor: default; }
+  nav .counter { font-size: 13px; color: #8891aa; min-width: 48px; text-align: center; }
+
+  .slides { flex: 1; position: relative; overflow: hidden; }
+  .slide {
+    position: absolute; inset: 0;
+    display: none; flex-direction: column;
+    align-items: center; justify-content: center;
+    padding: 32px 48px;
+    animation: fadeIn 0.2s ease;
+  }
+  .slide.active { display: flex; }
+  @keyframes fadeIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+
+  .slide-label { font-size: 11px; letter-spacing: 2px; text-transform: uppercase; color: #0D6E8A; margin-bottom: 12px; align-self: flex-start; }
+  h1 { font-size: clamp(22px, 3vw, 36px); font-weight: 700; color: #fff; margin-bottom: 8px; line-height: 1.2; }
+  h2 { font-size: clamp(14px, 1.8vw, 20px); font-weight: 400; color: #a8b8d0; margin-bottom: 20px; }
+
+  .keynote {
+    background: #0a1a1f; border: 1px solid #0D6E8A44;
+    border-left: 3px solid #1a9aba;
+    border-radius: 8px; padding: 14px 18px; margin-top: 16px; width: 100%;
+    font-size: 13px; color: #80c8d8; line-height: 1.6; font-style: italic;
+  }
+
+  /* PROBLEM */
+  .problem-row { display: flex; gap: 12px; width: 100%; margin: 12px 0; }
+  .problem-box {
+    flex: 1; background: #1a2035; border-radius: 8px; padding: 14px;
+    border-top: 2px solid #e05050;
+  }
+  .problem-title { font-size: 12px; font-weight: 700; color: #e05050; margin-bottom: 6px; }
+  .problem-text { font-size: 12px; color: #8891aa; line-height: 1.6; }
+  .solution-box {
+    width: 100%; background: #1a2035; border-radius: 8px; padding: 14px;
+    border-top: 2px solid #1a9aba; margin-top: 12px;
+  }
+  .solution-title { font-size: 12px; font-weight: 700; color: #1a9aba; margin-bottom: 6px; }
+
+  /* ACTOR DIAGRAM */
+  .actors {
+    display: flex; align-items: center; justify-content: center;
+    gap: 24px; width: 100%; margin: 20px 0;
+  }
+  .actor {
+    background: #1a2035; border-radius: 12px; padding: 20px 24px;
+    text-align: center; min-width: 160px; border: 1px solid #2a2d3a;
+  }
+  .actor.server { border-color: #1a9aba; }
+  .actor.client { border-color: #7B2D8B; }
+  .actor-icon { font-size: 32px; margin-bottom: 8px; }
+  .actor-label { font-size: 11px; letter-spacing: 1px; text-transform: uppercase; margin-bottom: 4px; }
+  .actor-label.server { color: #1a9aba; }
+  .actor-label.client { color: #c070e0; }
+  .actor-name { font-size: 15px; font-weight: 700; color: #e8eaf0; margin-bottom: 6px; }
+  .actor-desc { font-size: 11px; color: #8891aa; line-height: 1.5; }
+  .actor-arrow {
+    display: flex; flex-direction: column; align-items: center; gap: 8px;
+    min-width: 160px;
+  }
+  .arrow-line {
+    display: flex; align-items: center; gap: 8px; width: 100%;
+    font-size: 11px;
+  }
+  .arrow-label { background: #1a2035; border-radius: 4px; padding: 4px 8px; font-size: 10px; color: #8891aa; white-space: nowrap; }
+  .arrow-right { color: #1a9aba; font-size: 16px; }
+  .arrow-left { color: #c070e0; font-size: 16px; }
+
+  /* JSON EXAMPLES */
+  .json-pair { display: flex; gap: 16px; width: 100%; margin: 12px 0; }
+  .json-box {
+    flex: 1; background: #0f1520; border: 1px solid #2a3040;
+    border-radius: 8px; padding: 14px; font-family: 'Courier New', monospace;
+    font-size: 11px; line-height: 1.8; overflow: auto;
+  }
+  .json-title { font-size: 10px; letter-spacing: 1px; text-transform: uppercase; margin-bottom: 8px; font-family: 'Segoe UI', Arial, sans-serif; }
+  .json-title.req { color: #c070e0; }
+  .json-title.res { color: #1a9aba; }
+  .jk { color: #7eb8f0; }
+  .jv { color: #a0d880; }
+  .js { color: #e8a060; }
+  .jc { color: #556080; font-style: italic; }
+
+  /* TOOL DESCRIPTION */
+  .desc-compare { display: flex; gap: 16px; width: 100%; margin: 12px 0; }
+  .desc-box { flex: 1; background: #1a2035; border-radius: 8px; padding: 14px; }
+  .desc-title { font-size: 11px; letter-spacing: 1px; text-transform: uppercase; margin-bottom: 10px; }
+  .desc-title.bad { color: #e05050; }
+  .desc-title.good { color: #60c090; }
+  .desc-text {
+    font-family: 'Courier New', monospace; font-size: 11px;
+    line-height: 1.7; color: #8891aa; background: #0f1520;
+    border-radius: 6px; padding: 12px;
+  }
+  .desc-bad { color: #e05050; }
+  .desc-good { color: #60c090; }
+  .desc-consequence {
+    font-size: 11px; margin-top: 8px; padding: 8px 10px;
+    border-radius: 4px; line-height: 1.5;
+  }
+  .desc-consequence.bad { background: #2a1010; color: #e05050; }
+  .desc-consequence.good { background: #102010; color: #60c090; }
+
+  /* STACK */
+  .stack { display: flex; flex-direction: column; align-items: center; gap: 0; width: 80%; }
+  .stack-layer {
+    width: 100%; padding: 14px 20px; display: flex;
+    align-items: center; gap: 16px; border-radius: 0;
+    border: 1px solid #2a2d3a; margin-bottom: -1px;
+  }
+  .stack-layer:first-child { border-radius: 8px 8px 0 0; }
+  .stack-layer:last-child  { border-radius: 0 0 8px 8px; }
+  .stack-layer.uc0a  { background: #1a2035; border-color: #7B2D8B; }
+  .stack-layer.ucrag { background: #1a2010; border-color: #B5451B; }
+  .stack-layer.ucmcp { background: #0a1a1f; border-color: #0D6E8A; }
+  .stack-num { font-size: 22px; font-weight: 700; min-width: 32px; }
+  .stack-uc  { font-size: 12px; font-weight: 700; min-width: 80px; }
+  .stack-desc { font-size: 13px; color: #a8b8d0; flex: 1; }
+  .stack-layer-label { font-size: 10px; letter-spacing: 1px; text-transform: uppercase; min-width: 80px; text-align: right; }
+
+  /* ARCH */
+  .arch { display: flex; flex-direction: column; align-items: center; gap: 8px; width: 100%; }
+  .arch-layer {
+    width: 100%; background: #1a2035; border: 1px solid #2a2d3a;
+    border-radius: 8px; padding: 12px 20px; display: flex;
+    align-items: center; gap: 16px;
+  }
+  .arch-layer.active-l { border-color: #0D6E8A; }
+  .arch-label { font-size: 11px; color: #0D6E8A; min-width: 120px; font-weight: 600; }
+  .arch-content { font-size: 13px; color: #c8d8f0; flex: 1; }
+  .arch-arrow-down { font-size: 14px; color: #3a4a6a; }
+</style>
+</head>
+<body>
+
+<nav>
+  <span class="title">MCP PRIMER · RAG-to-MCP Workshop</span>
+  <div class="controls">
+    <button id="prev" onclick="go(-1)" disabled>← Prev</button>
+    <span class="counter" id="counter">1 / 6</span>
+    <button id="next" onclick="go(1)">Next →</button>
+  </div>
+</nav>
+
+<div class="slides">
+
+<!-- SLIDE 1: THE PROBLEM -->
+<div class="slide active">
+  <span class="slide-label">Slide 1 of 6 · Context</span>
+  <h1>Why agents need a standard tool interface</h1>
+  <h2>Without a standard — every tool requires custom integration</h2>
+
+  <div class="problem-row">
+    <div class="problem-box">
+      <div class="problem-title">The integration problem</div>
+      <div class="problem-text">You have built a RAG server. Another team has built a database query tool. A third team has a calendar tool. Every agent that wants to use all three needs to know the exact API of each one. Three tools × N agents = N×3 custom integrations.</div>
+    </div>
+    <div class="problem-box">
+      <div class="problem-title">The discovery problem</div>
+      <div class="problem-text">An agent cannot ask "what tools are available?" without a standard. It has to be told explicitly what each tool does, what inputs it takes, and when to call it — hardcoded into the agent's prompt every time.</div>
+    </div>
+  </div>
+
+  <div class="solution-box">
+    <div class="solution-title">MCP: Model Context Protocol</div>
+    <div class="problem-text" style="color:#c8d8f0">A standard protocol: MCP servers expose tools. MCP clients (agents) discover and call them. Any agent can call any MCP server without custom integration. The tool description tells the agent what the tool does — and when not to use it.</div>
+  </div>
+
+  <div class="keynote">"MCP is to AI tools what HTTP is to web APIs — a standard that makes every tool callable by every client."</div>
+</div>
+
+<!-- SLIDE 2: SERVER VS CLIENT -->
+<div class="slide">
+  <span class="slide-label">Slide 2 of 6 · Architecture</span>
+  <h1>MCP Server vs MCP Client</h1>
+  <h2>Two actors — one protocol</h2>
+
+  <div class="actors">
+    <div class="actor client">
+      <div class="actor-icon">🤖</div>
+      <div class="actor-label client">MCP Client</div>
+      <div class="actor-name">The Agent</div>
+      <div class="actor-desc">Discovers available tools. Decides when to call them based on the tool description. Sends structured requests. Receives structured responses.</div>
+    </div>
+
+    <div class="actor-arrow">
+      <div class="arrow-line">
+        <div class="arrow-label">tools/list</div>
+        <div class="arrow-right">→</div>
+      </div>
+      <div class="arrow-line">
+        <div class="arrow-left">←</div>
+        <div class="arrow-label">tool definitions</div>
+      </div>
+      <div style="height:12px;border-left:1px dashed #3a4a6a;"></div>
+      <div class="arrow-line">
+        <div class="arrow-label">tools/call</div>
+        <div class="arrow-right">→</div>
+      </div>
+      <div class="arrow-line">
+        <div class="arrow-left">←</div>
+        <div class="arrow-label">tool result</div>
+      </div>
+      <div style="font-size:10px;color:#3a5a6a;text-align:center;margin-top:6px;">JSON-RPC 2.0<br>over HTTP POST</div>
+    </div>
+
+    <div class="actor server">
+      <div class="actor-icon">⚙️</div>
+      <div class="actor-label server">MCP Server</div>
+      <div class="actor-name">Your server</div>
+      <div class="actor-desc">Exposes one or more tools. Returns tool definitions on request. Executes tools when called. Returns results in standard format.</div>
+    </div>
+  </div>
+
+  <div style="width:100%;background:#1a2035;border-radius:8px;padding:12px 16px;font-size:12px;color:#8891aa;border-left:3px solid #0D6E8A;">
+    In UC-MCP: your <strong style="color:#e8eaf0">mcp_server.py</strong> is the MCP Server. <strong style="color:#e8eaf0">test_client.py</strong> is the MCP Client. In production: the client would be Claude, Copilot, or any MCP-compatible agent.
+  </div>
+  <div class="keynote">"You are building the server side. The test_client.py simulates what any agent would do — discover your tools, then call them."</div>
+</div>
+
+<!-- SLIDE 3: THE TWO METHODS -->
+<div class="slide">
+  <span class="slide-label">Slide 3 of 6 · Protocol</span>
+  <h1>The two JSON-RPC methods</h1>
+  <h2>tools/list — discover · tools/call — execute</h2>
+
+  <div class="json-pair">
+    <div class="json-box">
+      <div class="json-title req">→ tools/list request</div>
+      <span class="jk">{</span><br>
+      &nbsp;&nbsp;<span class="jk">"jsonrpc"</span>: <span class="js">"2.0"</span>,<br>
+      &nbsp;&nbsp;<span class="jk">"method"</span>: <span class="js">"tools/list"</span>,<br>
+      &nbsp;&nbsp;<span class="jk">"id"</span>: <span class="jv">1</span><br>
+      <span class="jk">}</span>
+    </div>
+    <div class="json-box">
+      <div class="json-title res">← tools/list response</div>
+      <span class="jk">{</span><br>
+      &nbsp;&nbsp;<span class="jk">"result"</span>: {<br>
+      &nbsp;&nbsp;&nbsp;&nbsp;<span class="jk">"tools"</span>: [{<br>
+      &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="jk">"name"</span>: <span class="js">"query_policy_documents"</span>,<br>
+      &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="jk">"description"</span>: <span class="js">"..."</span>, <span class="jc">← this is the enforcement</span><br>
+      &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="jk">"inputSchema"</span>: { ... }<br>
+      &nbsp;&nbsp;&nbsp;&nbsp;}]<br>
+      &nbsp;&nbsp;}<br>
+      <span class="jk">}</span>
+    </div>
+  </div>
+
+  <div class="json-pair" style="margin-top:8px;">
+    <div class="json-box">
+      <div class="json-title req">→ tools/call request</div>
+      <span class="jk">{</span><br>
+      &nbsp;&nbsp;<span class="jk">"method"</span>: <span class="js">"tools/call"</span>,<br>
+      &nbsp;&nbsp;<span class="jk">"params"</span>: {<br>
+      &nbsp;&nbsp;&nbsp;&nbsp;<span class="jk">"name"</span>: <span class="js">"query_policy_documents"</span>,<br>
+      &nbsp;&nbsp;&nbsp;&nbsp;<span class="jk">"arguments"</span>: {<br>
+      &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="jk">"question"</span>: <span class="js">"Who approves LWP?"</span><br>
+      &nbsp;&nbsp;&nbsp;&nbsp;}<br>
+      &nbsp;&nbsp;}<br>
+      <span class="jk">}</span>
+    </div>
+    <div class="json-box">
+      <div class="json-title res">← tools/call response</div>
+      <span class="jk">{</span><br>
+      &nbsp;&nbsp;<span class="jk">"result"</span>: {<br>
+      &nbsp;&nbsp;&nbsp;&nbsp;<span class="jk">"content"</span>: [{<br>
+      &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="jk">"type"</span>: <span class="js">"text"</span>,<br>
+      &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="jk">"text"</span>: <span class="js">"Dept Head AND HR Director..."</span><br>
+      &nbsp;&nbsp;&nbsp;&nbsp;}],<br>
+      &nbsp;&nbsp;&nbsp;&nbsp;<span class="jk">"isError"</span>: <span class="jv">false</span><br>
+      &nbsp;&nbsp;}<br>
+      <span class="jk">}</span>
+    </div>
+  </div>
+
+  <div class="keynote">"All responses return HTTP 200. Application errors use isError: true in the JSON body — not HTTP error codes. Unknown methods return JSON-RPC error code -32601."</div>
+</div>
+
+<!-- SLIDE 4: TOOL DESCRIPTION AS ENFORCEMENT -->
+<div class="slide">
+  <span class="slide-label">Slide 4 of 6 · The Failure Mode</span>
+  <h1>The tool description is the enforcement</h1>
+  <h2>Vague description → agent calls tool for anything · Specific → agent knows scope</h2>
+
+  <div class="desc-compare">
+    <div class="desc-box">
+      <div class="desc-title bad">❌ Vague description</div>
+      <div class="desc-text">
+        <span class="desc-bad">"Answers questions about company policies."</span>
+      </div>
+      <div class="desc-consequence bad">
+        Agent sends: "What is the 2025 budget forecast for Ward 3?"<br>
+        Tool refuses. Agent wasted a call.<br>
+        In a multi-step chain — this breaks the entire flow.<br>
+        Agent had no way to know this question was out of scope.
+      </div>
+    </div>
+
+    <div class="desc-box">
+      <div class="desc-title good">✅ Specific description</div>
+      <div class="desc-text">
+        <span class="desc-good">"Answers questions about CMC HR Leave Policy, IT Acceptable Use Policy, and Finance Reimbursement Policy only. Returns cited answers grounded in retrieved document chunks. Returns a refusal for questions outside these three documents — do not send budget, procurement, or general policy questions to this tool."</span>
+      </div>
+      <div class="desc-consequence good">
+        Agent knows: only send HR / IT / Finance questions.<br>
+        Budget question → agent does not call this tool.<br>
+        No wasted calls. No broken chains.
+      </div>
+    </div>
+  </div>
+
+  <div class="keynote">"This is the E in R.I.C.E — applied at the tool interface layer instead of the prompt layer. Same principle. Different layer of the stack."</div>
+</div>
+
+<!-- SLIDE 5: THE STACK -->
+<div class="slide">
+  <span class="slide-label">Slide 5 of 6 · The Full Picture</span>
+  <h1>Three UCs · Three layers · One framework</h1>
+  <h2>R.I.C.E Enforcement applied at every layer of the AI engineering stack</h2>
+
+  <div class="stack">
+    <div class="stack-layer uc0a">
+      <div class="stack-num" style="color:#c070e0">1</div>
+      <div class="stack-uc" style="color:#c070e0">UC-0A</div>
+      <div class="stack-desc"><strong>Prompt layer</strong> — R.I.C.E Enforcement rules define what the classifier can and cannot output. No fixed enum = taxonomy drift. No severity keywords = severity blindness.</div>
+      <div class="stack-layer-label" style="color:#c070e0">Prompt</div>
+    </div>
+    <div class="stack-layer ucrag">
+      <div class="stack-num" style="color:#e87040">2</div>
+      <div class="stack-uc" style="color:#e87040">UC-RAG</div>
+      <div class="stack-desc"><strong>Retrieval layer</strong> — Enforcement rules define chunking strategy, similarity threshold, and context grounding. Wrong chunking = boundary failure. No threshold = wrong retrieval. No grounding = context breach.</div>
+      <div class="stack-layer-label" style="color:#e87040">Retrieval</div>
+    </div>
+    <div class="stack-layer ucmcp">
+      <div class="stack-num" style="color:#1a9aba">3</div>
+      <div class="stack-uc" style="color:#1a9aba">UC-MCP</div>
+      <div class="stack-desc"><strong>Tool interface layer</strong> — Tool description defines what the agent is allowed to call this tool for. Vague description = wrong tool calls. Specific description = correct agent routing.</div>
+      <div class="stack-layer-label" style="color:#1a9aba">Tool interface</div>
+    </div>
+  </div>
+
+  <div class="keynote">"UC-MCP calls UC-RAG. UC-RAG reads the policy docs. UC-0A validated the prompt engineering discipline that makes both trustworthy. One framework. Three layers."</div>
+</div>
+
+<!-- SLIDE 6: WHAT YOU'RE BUILDING -->
+<div class="slide">
+  <span class="slide-label">Slide 6 of 6 · UC-MCP Architecture</span>
+  <h1>What you are building</h1>
+  <h2>UC-MCP — a plain HTTP MCP server wrapping your RAG server</h2>
+
+  <div class="arch">
+    <div class="arch-layer">
+      <div class="arch-label" style="color:#8891aa;">MCP Client</div>
+      <div class="arch-content">test_client.py — sends JSON-RPC requests · simulates any MCP-compatible agent</div>
+    </div>
+    <div class="arch-arrow-down">↓ HTTP POST  /  JSON-RPC 2.0  ↓</div>
+    <div class="arch-layer active-l">
+      <div class="arch-label">serve_mcp</div>
+      <div class="arch-content">Plain HTTP server · handles tools/list and tools/call · returns JSON-RPC responses · HTTP 200 always</div>
+    </div>
+    <div class="arch-arrow-down">↓</div>
+    <div class="arch-layer active-l">
+      <div class="arch-label">query_policy_documents</div>
+      <div class="arch-content">Calls rag_server.py (or stub_rag.py) · formats result as MCP content · sets isError on refusal</div>
+    </div>
+    <div class="arch-arrow-down">↓</div>
+    <div class="arch-layer">
+      <div class="arch-label" style="color:#e87040;">RAG Server</div>
+      <div class="arch-content">stub_rag.py (working) or your rag_server.py · returns {answer, cited_chunks, refused}</div>
+    </div>
+  </div>
+
+  <div style="width:100%;background:#1a2035;border-radius:8px;padding:10px 16px;font-size:12px;color:#8891aa;border-left:3px solid #0D6E8A;margin-top:12px;">
+    Run: <span style="font-family:monospace;color:#1a9aba;">python3 mcp_server.py --port 8765</span> &nbsp;|&nbsp; Test: <span style="font-family:monospace;color:#c070e0;">python3 test_client.py --run-all</span>
+  </div>
+  <div class="keynote">"The tool description in TOOL_DEFINITION is the first thing to write and the last thing to check. Everything else is plumbing."</div>
+</div>
+
+</div>
+
+<script>
+let current = 0;
+const total = 6;
+
+function go(dir) {
+  document.querySelectorAll('.slide')[current].classList.remove('active');
+  current = Math.max(0, Math.min(total - 1, current + dir));
+  document.querySelectorAll('.slide')[current].classList.add('active');
+  document.getElementById('counter').textContent = `${current + 1} / ${total}`;
+  document.getElementById('prev').disabled = current === 0;
+  document.getElementById('next').disabled = current === total - 1;
+}
+
+document.addEventListener('keydown', e => {
+  if (e.key === 'ArrowRight' || e.key === 'ArrowDown') go(1);
+  if (e.key === 'ArrowLeft'  || e.key === 'ArrowUp')   go(-1);
+});
+</script>
+</body>
+</html>

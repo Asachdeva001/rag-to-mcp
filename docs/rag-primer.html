@@ -1,0 +1,519 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>RAG Primer — RAG-to-MCP Workshop</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: 'Segoe UI', Arial, sans-serif;
+    background: #0f1117;
+    color: #e8eaf0;
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  /* NAV */
+  nav {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 24px;
+    background: #1a1d27;
+    border-bottom: 1px solid #2a2d3a;
+    flex-shrink: 0;
+  }
+  nav .title { font-size: 13px; color: #8891aa; letter-spacing: 0.5px; }
+  nav .controls { display: flex; align-items: center; gap: 12px; }
+  nav button {
+    background: #2a2d3a; border: 1px solid #3a3d4a; color: #c8cdd8;
+    padding: 6px 16px; border-radius: 4px; cursor: pointer; font-size: 13px;
+    transition: all 0.15s;
+  }
+  nav button:hover { background: #1F4E79; border-color: #2E75B6; color: #fff; }
+  nav button:disabled { opacity: 0.3; cursor: default; }
+  nav .counter { font-size: 13px; color: #8891aa; min-width: 48px; text-align: center; }
+
+  /* SLIDES */
+  .slides { flex: 1; position: relative; overflow: hidden; }
+  .slide {
+    position: absolute; inset: 0;
+    display: none;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 32px 48px;
+    animation: fadeIn 0.2s ease;
+  }
+  .slide.active { display: flex; }
+  @keyframes fadeIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+
+  /* SLIDE COMPONENTS */
+  .slide-label {
+    font-size: 11px; letter-spacing: 2px; text-transform: uppercase;
+    color: #6B8CBA; margin-bottom: 12px; align-self: flex-start;
+  }
+  h1 { font-size: clamp(22px, 3vw, 36px); font-weight: 700; color: #fff; margin-bottom: 8px; line-height: 1.2; }
+  h2 { font-size: clamp(16px, 2vw, 22px); font-weight: 600; color: #a8b8d0; margin-bottom: 24px; font-weight: 400; }
+  .tag {
+    display: inline-block; padding: 3px 10px; border-radius: 12px;
+    font-size: 11px; font-weight: 600; letter-spacing: 0.5px; margin-bottom: 20px;
+  }
+  .tag.rag { background: #B5451B22; color: #e87040; border: 1px solid #B5451B44; }
+  .tag.rice { background: #7B2D8B22; color: #c070e0; border: 1px solid #7B2D8B44; }
+  .tag.craft { background: #2D6A4F22; color: #60c090; border: 1px solid #2D6A4F44; }
+
+  /* PIPELINE DIAGRAM */
+  .pipeline {
+    display: flex; align-items: center; gap: 0;
+    margin: 24px 0; width: 100%; justify-content: center; flex-wrap: wrap;
+  }
+  .pipe-step {
+    display: flex; flex-direction: column; align-items: center; gap: 6px;
+    min-width: 90px;
+  }
+  .pipe-box {
+    background: #1a2035; border: 1px solid #2E75B6;
+    border-radius: 8px; padding: 10px 14px; text-align: center;
+    font-size: 13px; font-weight: 600; color: #7eb8f0; width: 100%;
+  }
+  .pipe-box.highlight { border-color: #e87040; color: #e87040; background: #2a1a10; }
+  .pipe-box.dim { border-color: #2a2d3a; color: #556080; }
+  .pipe-sub { font-size: 10px; color: #556080; text-align: center; max-width: 90px; }
+  .pipe-arrow { color: #2E75B6; font-size: 18px; padding: 0 4px; margin-top: -16px; }
+
+  /* VECTOR VISUAL */
+  .vector-row {
+    display: flex; align-items: center; gap: 12px; margin: 8px 0;
+    background: #1a2035; border-radius: 8px; padding: 12px 16px; width: 100%;
+  }
+  .vector-label { font-size: 13px; color: #a8b8d0; min-width: 220px; }
+  .vector-bars { display: flex; gap: 3px; align-items: flex-end; height: 32px; }
+  .vec-bar { width: 8px; border-radius: 2px 2px 0 0; }
+  .vector-score { font-size: 11px; color: #60c090; margin-left: 8px; font-weight: 600; }
+
+  /* CHUNK VISUAL */
+  .chunk-container { display: flex; gap: 16px; width: 100%; margin: 16px 0; }
+  .chunk-bad, .chunk-good { flex: 1; }
+  .chunk-title { font-size: 11px; letter-spacing: 1px; text-transform: uppercase; margin-bottom: 8px; }
+  .chunk-title.bad { color: #e05050; }
+  .chunk-title.good { color: #60c090; }
+  .chunk-block {
+    background: #1a2035; border-radius: 6px; padding: 10px 12px;
+    font-size: 11px; line-height: 1.7; color: #8891aa; margin-bottom: 6px;
+    border-left: 3px solid transparent;
+  }
+  .chunk-block.cut { border-left-color: #e05050; }
+  .chunk-block.complete { border-left-color: #60c090; }
+  .chunk-highlight { color: #e8eaf0; font-weight: 600; }
+  .chunk-cut { color: #e05050; }
+
+  /* TWO COLUMN */
+  .two-col { display: flex; gap: 20px; width: 100%; margin: 16px 0; }
+  .col { flex: 1; }
+  .col-title { font-size: 11px; letter-spacing: 1px; text-transform: uppercase; margin-bottom: 10px; }
+  .col-title.bad { color: #e05050; }
+  .col-title.good { color: #60c090; }
+
+  /* FAILURE MODES */
+  .failure-row {
+    display: flex; align-items: flex-start; gap: 16px;
+    background: #1a2035; border-radius: 8px; padding: 14px 16px;
+    margin-bottom: 10px; border-left: 3px solid #e87040;
+  }
+  .failure-num {
+    font-size: 20px; font-weight: 700; color: #e87040; min-width: 24px;
+  }
+  .failure-content {}
+  .failure-name { font-size: 14px; font-weight: 700; color: #e8eaf0; margin-bottom: 3px; }
+  .failure-desc { font-size: 12px; color: #8891aa; line-height: 1.5; }
+
+  /* ARCH DIAGRAM */
+  .arch { display: flex; flex-direction: column; align-items: center; gap: 8px; width: 100%; }
+  .arch-layer {
+    width: 100%; background: #1a2035; border: 1px solid #2a2d3a;
+    border-radius: 8px; padding: 12px 20px; display: flex;
+    align-items: center; gap: 16px;
+  }
+  .arch-layer.active-l { border-color: #e87040; }
+  .arch-label { font-size: 11px; color: #8891aa; min-width: 80px; }
+  .arch-content { font-size: 13px; color: #c8d8f0; flex: 1; }
+  .arch-badge {
+    font-size: 10px; padding: 2px 8px; border-radius: 10px;
+    background: #B5451B22; color: #e87040; border: 1px solid #B5451B44;
+  }
+  .arch-arrow-down { font-size: 16px; color: #3a4a6a; }
+
+  /* GROUNDING BOX */
+  .grounding { width: 100%; margin: 16px 0; }
+  .ground-box {
+    background: #1a2035; border: 1px solid #2E75B6;
+    border-radius: 8px; padding: 14px 18px; margin-bottom: 8px;
+  }
+  .ground-label { font-size: 10px; letter-spacing: 1px; color: #6B8CBA; margin-bottom: 6px; text-transform: uppercase; }
+  .ground-text { font-size: 12px; color: #c8d8f0; line-height: 1.6; }
+  .ground-text .blocked { color: #e05050; text-decoration: line-through; opacity: 0.6; }
+  .ground-text .allowed { color: #60c090; }
+  .ground-enforce {
+    background: #2D6A4F22; border: 1px solid #2D6A4F44;
+    border-radius: 8px; padding: 12px 16px;
+    font-size: 12px; color: #80d0a0; line-height: 1.6;
+  }
+
+  /* PROBLEM SLIDE */
+  .problem-row {
+    display: flex; gap: 12px; width: 100%; margin: 8px 0;
+  }
+  .problem-box {
+    flex: 1; background: #1a2035; border-radius: 8px; padding: 14px;
+    border-top: 2px solid #e05050;
+  }
+  .problem-title { font-size: 12px; font-weight: 700; color: #e05050; margin-bottom: 6px; }
+  .problem-text { font-size: 12px; color: #8891aa; line-height: 1.5; }
+  .solution-box {
+    width: 100%; background: #1a2035; border-radius: 8px; padding: 14px;
+    border-top: 2px solid #60c090; margin-top: 12px;
+  }
+  .solution-title { font-size: 12px; font-weight: 700; color: #60c090; margin-bottom: 6px; }
+
+  /* KEYNOTE */
+  .keynote {
+    background: #1a1035; border: 1px solid #7B2D8B44;
+    border-left: 3px solid #c070e0;
+    border-radius: 8px; padding: 14px 18px; margin-top: 16px; width: 100%;
+    font-size: 13px; color: #c8a0e8; line-height: 1.6; font-style: italic;
+  }
+</style>
+</head>
+<body>
+
+<nav>
+  <span class="title">RAG PRIMER · RAG-to-MCP Workshop</span>
+  <div class="controls">
+    <button id="prev" onclick="go(-1)" disabled>← Prev</button>
+    <span class="counter" id="counter">1 / 8</span>
+    <button id="next" onclick="go(1)">Next →</button>
+  </div>
+</nav>
+
+<div class="slides">
+
+<!-- SLIDE 1: THE PROBLEM -->
+<div class="slide active">
+  <span class="slide-label">Slide 1 of 8 · Context</span>
+  <h1>Why LLMs fail on your data</h1>
+  <h2>Three structural problems — one solution</h2>
+  <div class="problem-row">
+    <div class="problem-box">
+      <div class="problem-title">Knowledge cutoff</div>
+      <div class="problem-text">LLMs are trained on data up to a fixed date. They know nothing about documents created after that date — or documents that were never public.</div>
+    </div>
+    <div class="problem-box">
+      <div class="problem-title">Private data blindness</div>
+      <div class="problem-text">Your HR policy, IT acceptable use policy, and finance reimbursement rules are not on the internet. The LLM has never seen them.</div>
+    </div>
+    <div class="problem-box">
+      <div class="problem-title">Context window limits</div>
+      <div class="problem-text">You cannot paste all your documents into every prompt. The context window has a limit — and filling it with irrelevant text degrades answer quality.</div>
+    </div>
+  </div>
+  <div class="solution-box">
+    <div class="solution-title">The RAG solution</div>
+    <div class="problem-text" style="color:#c8d8f0">Retrieve only the relevant document chunks at query time. Give the LLM exactly what it needs — no more. Enforce that it answers from retrieved context only.</div>
+  </div>
+  <div class="keynote">"RAG is not about making the LLM smarter. It is about giving it the right context — and nothing else."</div>
+</div>
+
+<!-- SLIDE 2: THE PIPELINE -->
+<div class="slide">
+  <span class="slide-label">Slide 2 of 8 · Architecture</span>
+  <h1>The RAG pipeline</h1>
+  <h2>Six stages — each one a failure point if done naively</h2>
+  <div class="pipeline">
+    <div class="pipe-step">
+      <div class="pipe-box dim">Ingest</div>
+      <div class="pipe-sub">Load .txt files</div>
+    </div>
+    <div class="pipe-arrow">→</div>
+    <div class="pipe-step">
+      <div class="pipe-box highlight">Chunk</div>
+      <div class="pipe-sub">Split into pieces</div>
+    </div>
+    <div class="pipe-arrow">→</div>
+    <div class="pipe-step">
+      <div class="pipe-box">Embed</div>
+      <div class="pipe-sub">Convert to vectors</div>
+    </div>
+    <div class="pipe-arrow">→</div>
+    <div class="pipe-step">
+      <div class="pipe-box dim">Store</div>
+      <div class="pipe-sub">ChromaDB</div>
+    </div>
+    <div class="pipe-arrow">→</div>
+    <div class="pipe-step">
+      <div class="pipe-box highlight">Retrieve</div>
+      <div class="pipe-sub">Top-k by similarity</div>
+    </div>
+    <div class="pipe-arrow">→</div>
+    <div class="pipe-step">
+      <div class="pipe-box highlight">Generate</div>
+      <div class="pipe-sub">Grounded answer</div>
+    </div>
+  </div>
+  <div class="failure-row" style="border-color:#7B2D8B; margin-top:8px;">
+    <div class="failure-num" style="color:#c070e0">R</div>
+    <div class="failure-content">
+      <div class="failure-name" style="color:#c070e0">R.I.C.E applies at every stage</div>
+      <div class="failure-desc">Chunk is where your Enforcement rules determine boundary strategy. Retrieve is where the similarity threshold rule lives. Generate is where the grounding Enforcement prevents answers outside retrieved context.</div>
+    </div>
+  </div>
+  <div class="keynote">"Highlighted stages are where the three failure modes live. You will fix all three today."</div>
+</div>
+
+<!-- SLIDE 3: EMBEDDINGS -->
+<div class="slide">
+  <span class="slide-label">Slide 3 of 8 · Core Concept</span>
+  <h1>What is an embedding?</h1>
+  <h2>A list of numbers that represents meaning — similar meaning = close numbers</h2>
+
+  <div class="vector-row" style="border-left:3px solid #2E75B6;">
+    <div class="vector-label">Query: <em>"Who approves leave without pay?"</em></div>
+    <div class="vector-bars">
+      <div class="vec-bar" style="height:28px;background:#2E75B6"></div>
+      <div class="vec-bar" style="height:20px;background:#2E75B6"></div>
+      <div class="vec-bar" style="height:32px;background:#2E75B6"></div>
+      <div class="vec-bar" style="height:14px;background:#2E75B6"></div>
+      <div class="vec-bar" style="height:25px;background:#2E75B6"></div>
+      <div class="vec-bar" style="height:18px;background:#2E75B6"></div>
+      <div class="vec-bar" style="height:30px;background:#2E75B6"></div>
+      <div class="vec-bar" style="height:22px;background:#2E75B6"></div>
+    </div>
+    <div style="font-size:11px;color:#6B8CBA;margin-left:8px;">[0.41, -0.12, 0.67, ...]  384 values</div>
+  </div>
+
+  <div class="vector-row" style="border-left:3px solid #60c090; margin-top:6px;">
+    <div class="vector-label">Chunk: <em>"LWP requires approval from the Department Head and the HR Director..."</em></div>
+    <div class="vector-bars">
+      <div class="vec-bar" style="height:26px;background:#60c090"></div>
+      <div class="vec-bar" style="height:22px;background:#60c090"></div>
+      <div class="vec-bar" style="height:30px;background:#60c090"></div>
+      <div class="vec-bar" style="height:16px;background:#60c090"></div>
+      <div class="vec-bar" style="height:24px;background:#60c090"></div>
+      <div class="vec-bar" style="height:19px;background:#60c090"></div>
+      <div class="vec-bar" style="height:28px;background:#60c090"></div>
+      <div class="vec-bar" style="height:23px;background:#60c090"></div>
+    </div>
+    <div class="vector-score">score: 0.84 ✓</div>
+  </div>
+
+  <div class="vector-row" style="border-left:3px solid #e05050; margin-top:6px;">
+    <div class="vector-label">Chunk: <em>"Annual leave accrues at 1.5 days per month from the date of joining..."</em></div>
+    <div class="vector-bars">
+      <div class="vec-bar" style="height:10px;background:#e05050"></div>
+      <div class="vec-bar" style="height:28px;background:#e05050"></div>
+      <div class="vec-bar" style="height:8px;background:#e05050"></div>
+      <div class="vec-bar" style="height:30px;background:#e05050"></div>
+      <div class="vec-bar" style="height:12px;background:#e05050"></div>
+      <div class="vec-bar" style="height:26px;background:#e05050"></div>
+      <div class="vec-bar" style="height:9px;background:#e05050"></div>
+      <div class="vec-bar" style="height:22px;background:#e05050"></div>
+    </div>
+    <div class="vector-score" style="color:#e05050">score: 0.31 ✗</div>
+  </div>
+
+  <div class="keynote">"The embedding model (all-MiniLM-L6-v2) converts every sentence into 384 numbers. Your query and the matching chunk end up close in that 384-dimensional space. That closeness is the score."</div>
+</div>
+
+<!-- SLIDE 4: CHUNKING MATTERS -->
+<div class="slide">
+  <span class="slide-label">Slide 4 of 8 · Failure Mode 1</span>
+  <h1>Why chunking strategy matters</h1>
+  <h2>Fixed-size chunking vs sentence-aware chunking — on clause 5.2</h2>
+
+  <div class="chunk-container">
+    <div class="chunk-bad">
+      <div class="chunk-title bad">❌ Fixed-size (400 chars)</div>
+      <div class="chunk-block cut">
+        <span class="chunk-highlight">Chunk 11:</span> "...An employee may apply for Leave Without Pay only after exhausting all applicable paid leave entitlements. LWP requires approval from the <span class="chunk-cut">Department Head and the</span>"
+      </div>
+      <div class="chunk-block cut">
+        <span class="chunk-highlight">Chunk 12:</span> "<span class="chunk-cut">HR Director. Manager approval alone is not sufficient.</span> LWP exceeding 30 continuous days requires approval from the Municipal Commissioner..."
+      </div>
+      <div style="font-size:11px;color:#e05050;margin-top:6px;">→ Query "who approves LWP" retrieves chunk 11<br>→ Answer: "Department Head" — HR Director missing<br>→ Condition drop</div>
+    </div>
+
+    <div class="chunk-good">
+      <div class="chunk-title good">✅ Sentence-aware</div>
+      <div class="chunk-block complete">
+        <span class="chunk-highlight">Chunk 11:</span> "An employee may apply for Leave Without Pay only after exhausting all applicable paid leave entitlements. <span class="chunk-highlight">LWP requires approval from the Department Head and the HR Director. Manager approval alone is not sufficient.</span>"
+      </div>
+      <div style="font-size:11px;color:#60c090;margin-top:6px;">→ Both conditions in the same chunk<br>→ Answer: "Department Head AND HR Director"<br>→ Complete obligation preserved</div>
+    </div>
+  </div>
+
+  <div class="keynote">"Your Enforcement rule: chunk size must not exceed 400 tokens. Never split mid-sentence. This single rule prevents the chunk boundary failure."</div>
+</div>
+
+<!-- SLIDE 5: RETRIEVAL -->
+<div class="slide">
+  <span class="slide-label">Slide 5 of 8 · Failure Mode 2</span>
+  <h1>How retrieval works — and when it fails</h1>
+  <h2>Cosine similarity on vectors — not keyword search</h2>
+
+  <div style="width:100%;margin:12px 0;">
+    <div class="vector-row" style="background:#0f1a2a;border-left:3px solid #2E75B6;margin-bottom:4px;">
+      <div class="vector-label" style="font-weight:700;color:#7eb8f0;">Query: "Can I use my personal phone for work files?"</div>
+      <div style="font-size:11px;color:#6B8CBA;">embedded → [0.31, 0.77, -0.12, ...]</div>
+    </div>
+
+    <div style="display:flex;gap:12px;margin-top:12px;">
+      <div style="flex:1;">
+        <div style="font-size:10px;letter-spacing:1px;color:#e05050;margin-bottom:6px;text-transform:uppercase;">❌ No threshold (naive)</div>
+        <div class="chunk-block" style="border-left:3px solid #e05050;margin-bottom:4px;">
+          <span style="color:#e05050">score 0.72</span> — policy_hr_leave.txt chunk 3<br>
+          <span style="font-size:10px;color:#556080">"Employees must submit leave using Form HR-L1..."</span>
+        </div>
+        <div class="chunk-block" style="border-left:3px solid #e05050;margin-bottom:4px;">
+          <span style="color:#e05050">score 0.68</span> — policy_hr_leave.txt chunk 8<br>
+          <span style="font-size:10px;color:#556080">"Male employees are entitled to 5 days paternity..."</span>
+        </div>
+        <div style="font-size:11px;color:#e05050;margin-top:4px;">HR leave chunks returned for an IT question</div>
+      </div>
+      <div style="flex:1;">
+        <div style="font-size:10px;letter-spacing:1px;color:#60c090;margin-bottom:6px;text-transform:uppercase;">✅ With threshold (0.6) + doc filter</div>
+        <div class="chunk-block" style="border-left:3px solid #60c090;margin-bottom:4px;">
+          <span style="color:#60c090">score 0.81</span> — policy_it_acceptable_use.txt chunk 4<br>
+          <span style="font-size:10px;color:#a8c8a0">"Personal devices may be used to access CMC email and the employee self-service portal only..."</span>
+        </div>
+        <div style="font-size:11px;color:#60c090;margin-top:4px;">Correct document, correct chunk, cited</div>
+      </div>
+    </div>
+  </div>
+  <div class="keynote">"The similarity threshold (0.6) and metadata filtering are Enforcement rules in your agents.md — not just code parameters. They prevent the wrong-retrieval failure."</div>
+</div>
+
+<!-- SLIDE 6: GROUNDING -->
+<div class="slide">
+  <span class="slide-label">Slide 6 of 8 · Failure Mode 3</span>
+  <h1>Grounding the answer</h1>
+  <h2>The LLM still has its training knowledge — Enforcement keeps it out</h2>
+
+  <div class="grounding">
+    <div class="ground-box">
+      <div class="ground-label">Retrieved context (what the LLM sees)</div>
+      <div class="ground-text">[policy_it_acceptable_use.txt, chunk 4]: "Personal devices may be used to access CMC email and the CMC employee self-service portal only. Personal devices must not be used to access, store, or transmit classified or sensitive CMC data."</div>
+    </div>
+
+    <div style="display:flex;gap:12px;margin-top:10px;">
+      <div style="flex:1;">
+        <div style="font-size:10px;letter-spacing:1px;color:#e05050;margin-bottom:6px;text-transform:uppercase;">❌ No grounding enforcement</div>
+        <div class="chunk-block" style="border-left:3px solid #e05050;">
+          "Yes, you can use your personal phone for approved work tools and email. <span style="color:#e05050">As is standard practice in government organisations</span>, employees are expected to maintain appropriate security on personal devices."
+          <div style="font-size:10px;color:#e05050;margin-top:6px;">↑ "standard practice" — not in any document. LLM used training knowledge.</div>
+        </div>
+      </div>
+      <div style="flex:1;">
+        <div style="font-size:10px;letter-spacing:1px;color:#60c090;margin-bottom:6px;text-transform:uppercase;">✅ With grounding enforcement</div>
+        <div class="chunk-block" style="border-left:3px solid #60c090;">
+          "Personal devices may be used to access CMC email and the CMC employee self-service portal only. [Source: policy_it_acceptable_use.txt, chunk 4]"
+          <div style="font-size:10px;color:#60c090;margin-top:6px;">↑ Every word traceable to the retrieved chunk.</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="ground-enforce" style="margin-top:10px;">
+      Enforcement rule: "Answer must use only information present in the retrieved chunks. Never add context from outside the retrieved set. If the answer is not in retrieved chunks — use the refusal template."
+    </div>
+  </div>
+</div>
+
+<!-- SLIDE 7: THREE FAILURE MODES -->
+<div class="slide">
+  <span class="slide-label">Slide 7 of 8 · Summary</span>
+  <h1>The three failure modes</h1>
+  <h2>All caused by missing Enforcement rules — all fixable in agents.md</h2>
+
+  <div class="failure-row">
+    <div class="failure-num">1</div>
+    <div class="failure-content">
+      <div class="failure-name">Chunk boundary failure</div>
+      <div class="failure-desc">Fixed-size chunking splits multi-condition clauses across chunks. Retrieval returns an incomplete clause. Answer drops one condition silently. Fix: sentence-aware chunking + max 400 token limit.</div>
+    </div>
+  </div>
+  <div class="failure-row">
+    <div class="failure-num">2</div>
+    <div class="failure-content">
+      <div class="failure-name">Wrong chunk retrieval</div>
+      <div class="failure-desc">No similarity threshold or document metadata filter. Query "personal phone" retrieves HR leave chunks with superficial similarity. Fix: threshold 0.6 + document-level filter in Enforcement.</div>
+    </div>
+  </div>
+  <div class="failure-row">
+    <div class="failure-num">3</div>
+    <div class="failure-content">
+      <div class="failure-name">Answer outside retrieved context</div>
+      <div class="failure-desc">LLM uses training knowledge to enrich the answer. Adds "as is standard practice" — not in any document. Fix: grounding Enforcement rule requiring every claim to be traceable to a retrieved chunk.</div>
+    </div>
+  </div>
+
+  <div class="keynote">"All three failures are invisible without a systematic check. Your agents.md Enforcement rules are the check."</div>
+</div>
+
+<!-- SLIDE 8: WHAT YOU'RE BUILDING -->
+<div class="slide">
+  <span class="slide-label">Slide 8 of 8 · UC-RAG Architecture</span>
+  <h1>What you are building</h1>
+  <h2>UC-RAG — a retrieval-augmented policy assistant</h2>
+
+  <div class="arch">
+    <div class="arch-layer">
+      <div class="arch-label" style="color:#8891aa;">Input</div>
+      <div class="arch-content">3 policy .txt files — HR Leave · IT Acceptable Use · Finance Reimbursement</div>
+    </div>
+    <div class="arch-arrow-down">↓</div>
+    <div class="arch-layer active-l">
+      <div class="arch-label" style="color:#e87040;">chunk_documents</div>
+      <div class="arch-content">Sentence-aware split · max 400 tokens · returns {doc_name, chunk_index, text}</div>
+      <div class="arch-badge">skill 1</div>
+    </div>
+    <div class="arch-arrow-down">↓  embed with all-MiniLM-L6-v2  →  store in ChromaDB  ↓</div>
+    <div class="arch-layer active-l">
+      <div class="arch-label" style="color:#e87040;">retrieve_and_answer</div>
+      <div class="arch-content">Query → embed → top-3 chunks → filter &lt; 0.6 → grounded prompt → Gemini → cited answer</div>
+      <div class="arch-badge">skill 2</div>
+    </div>
+    <div class="arch-arrow-down">↓</div>
+    <div class="arch-layer">
+      <div class="arch-label" style="color:#8891aa;">Output</div>
+      <div class="arch-content">Answer + cited chunks — or refusal template if no chunk above threshold</div>
+    </div>
+  </div>
+
+  <div class="keynote">"stub_rag.py is the working reference. Your rag_server.py implements the same pipeline. UC-MCP will call whichever one works."</div>
+</div>
+
+</div><!-- end slides -->
+
+<script>
+let current = 0;
+const total = 8;
+
+function go(dir) {
+  document.querySelectorAll('.slide')[current].classList.remove('active');
+  current = Math.max(0, Math.min(total - 1, current + dir));
+  document.querySelectorAll('.slide')[current].classList.add('active');
+  document.getElementById('counter').textContent = `${current + 1} / ${total}`;
+  document.getElementById('prev').disabled = current === 0;
+  document.getElementById('next').disabled = current === total - 1;
+}
+
+document.addEventListener('keydown', e => {
+  if (e.key === 'ArrowRight' || e.key === 'ArrowDown') go(1);
+  if (e.key === 'ArrowLeft'  || e.key === 'ArrowUp')   go(-1);
+});
+</script>
+</body>
+</html>

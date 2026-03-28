@@ -180,10 +180,22 @@ try:
 except Exception as e:
     checks.append(('Embedding model', False, str(e)))
 
-# ChromaDB index
-import os
-idx = os.path.exists('./stub_chroma_db')
-checks.append(('Stub index built', idx, 'found' if idx else 'RUN: python3 stub_rag.py --build-index'))
+# ChromaDB stub index
+import os, sys
+idx_exists = os.path.exists('../uc-rag/stub_chroma_db') or os.path.exists('./stub_chroma_db')
+checks.append(('Stub index built', idx_exists, 'found' if idx_exists else 'CRITICAL: RUN python3 uc-rag/stub_rag.py --build-index'))
+
+# Stub actually works
+if idx_exists:
+    try:
+        sys.path.insert(0, '../uc-rag' if os.path.exists('../uc-rag') else 'uc-rag')
+        from stub_rag import query as stub_query
+        result = stub_query('test query')
+        checks.append(('Stub query works', True, 'answered'))
+    except Exception as e:
+        checks.append(('Stub query works', False, f'CRITICAL: {str(e)[:50]}'))
+else:
+    checks.append(('Stub query works', False, 'CRITICAL: build index first'))
 
 print()
 for name, ok, note in checks:
